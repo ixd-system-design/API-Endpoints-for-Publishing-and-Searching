@@ -1,56 +1,127 @@
 # API Endpoints for Publishing and Searching
-This [NodeJS](https://nodejs.org/en) App uses [Express](https://www.npmjs.com/package/express) and [Prisma](https://www.npmjs.com/package/prisma) to publish a simple read-only API endpoint for a [MongoDB](https://www.mongodb.com/products/platform/atlas-database) data collection. This allows you to publish an existing dataset.
 
-## Context
-This demo assumes you already have an existing [MongoDB Atlas](https://www.mongodb.com/products/platform/atlas-database) cluster with at least one data collection. For example, you might use one of the [sample datasets](https://www.mongodb.com/docs/atlas/sample-data/sample-airbnb/) provided by Atlas, or create your own dataset by [importing a CSV](https://www.mongodb.com/docs/compass/import-export/) through [MongoDB Compass](https://www.mongodb.com/docs/compass/). 
+Publish a read-only API for an existing MongoDB collection using [Express](https://expressjs.com/), the native [MongoDB Node.js driver](https://www.mongodb.com/docs/drivers/node/current/), and [Netlify Functions](https://docs.netlify.com/build/frameworks/framework-setup-guides/express/).
 
-# Setup Process
-1. Add an environment variable for your MongoDB connection string
-2. Setup Prisma to communicate with MongoDB
-3. Define your API endpoints
-4. Run the app
+You need an existing database and collection. Use an Atlas sample dataset or [import your own data through MongoDB Compass](https://www.mongodb.com/docs/compass/import-export/). The app does not seed data, create collections or indexes, or expose write endpoints.
 
-# 1. Environment Variables
-You must create an environment variable called `DATABASE_URL`, containing the connection string that points to your MongoDB Atlas Cluster. You can retrieve your own connection string from the MongoDB Atlas dashboard. TIP: You may also be able to retrieve your connection string from the MongoDB Compass Desktop client if you're already connected there.  
+## Project structure
 
-The example below shows what your `.env` may look like. Note that the trailing end of this string `sample_airbnb` refers to the name of a database. You may substitute any other database here including one you create yourself.  
-```DATABASE_URL=mongodb+srv://username:password@cluster.abc.mongodb.net/sample_airbnb```
+```text
+backend/
+  functions/api.js       All endpoints, the Netlify handler, and local startup
+  database/connect.js    Shared MongoClient connection pool
+frontend/
+  index.html             Demo page
+  script.js              Fetch and display data
+  style.css              Page styles
+netlify.toml             Static hosting, functions, and URL routing
+```
 
-When working locally, create a file called `.env` and add the `DATABASE_URL` variable to it. For an example, see the file called `.env.example`. 
+## Local development and Netlify hosting
 
-When deploying your project to a server, set the environment variable using the appropriate settings (See, for example, [Environment Variables on Vercel](https://vercel.com/docs/environment-variables)).  
+The same Express app and API endpoints in `backend/functions/api.js` run in both environments. The conditional at the bottom of that file selects how the app starts:
 
-# 2. Setup Prisma 
-Prisma needs to model how your database is structured in order to communicate effectively. As an optional shortcut, you can run `npm run setup` to run all sub-steps automatically (the `setup` script is defined in `package.json`). Alternately, or if you have trouble, you can proceed step by step:
+| Responsibility | Local development | Deployed on Netlify |
+| --- | --- | --- |
+| Startup | With `NETLIFY` unset, connect to MongoDB and call `app.listen()` | Netlify sets `NETLIFY`, so local startup is skipped; requests use the exported `handler` through `serverless-http` |
+| Frontend files | Express serves `frontend/` | Netlify serves `frontend/` as static files |
+| API routing | Express handles `/api/...` directly | `netlify.toml` rewrites `/api/...` to the function, which runs the same Express routes |
+| Database configuration | `MONGODB_URI` is loaded from `.env` | `MONGODB_URI` is configured in Netlify's environment variable settings |
+| Connection reuse | The running Express process reuses its MongoDB connection | A function instance reuses its connection while it stays warm |
 
-## 2.1. Install libraries
-On the terminal, run `npm install`. This will fetch and install all the dependencies we need, including Prisma and Express. Dependencies will be placed in the `node_modules` folder.
+**Students do not need the Netlify CLI or a Netlify account to run the app locally.** After installing Node.js and configuring MongoDB, use `npm install` and `npm start`. Local development uses an ordinary Express server; it does not require a serverless emulator or read the routing rules in `netlify.toml`.
 
-## 2.2. Make a Schema (model the database structure)
-Prisma uses a *Data Model* or [Schema](https://www.prisma.io/docs/orm/prisma-schema/overview) to understand and query your data collection. To infer a schema for your existing data, run this command:
-```npx prisma db pull --force```
-Prisma *introspects* the database to create a [Model](https://www.prisma.io/docs/orm/prisma-schema/data-model/models) based on the structure of your data. The schema is written to `/prisma/schema.prisma`. NOTE: this overwrites whatever may be there.
+## 1. Install dependencies
 
-## 2.3. Mark Optional Fields  
-Importantly, Prisma will assume that all fields are *required*. This is fine if your data is complete, but if there's any missing data, you will want to mark [optional fields](https://www.prisma.io/docs/orm/prisma-schema/data-model/models#optional-and-mandatory-fields) in your model. It's good to do this upfront to avoid problems later. To explore the structure of your data, you can use the [Schema](https://www.mongodb.com/docs/compass/schema/) tab in MongoDB Compass. You can also query MongoDB to check if data is missing for a given field. For example, looking at the `sample_restaurants` dataset, The following query shows two documents that are missing a GPS location: `{"address.longitude": {"$exists": false}}`. Based on this information we could mark the longitude field as optional in the Prisma schema.
+Use Node.js 24 (also specified in the Netlify configuration), then run:
 
-## 2.4. Generate Prisma Client (to communicate effectively)
-Once you have a schema, you can generate a [Prisma Client](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/introduction). Here's the command:
-```npx prisma generate```
-The generated client is tailored to your data and can be used in our app to query the database. 
+```sh
+npm install
+```
 
-# 3. Setup API endpoint
-Open the file called `/routes/api.js` and customize it to fit your needs. 
-- Be sure to change the default model name from `items` to whichever model you want to work with. Models are defined in `/prisma/schema.prisma`. 
-- The search endpoint assumes that you have a field called `name`. However, your data might not have such a field. In this case you should pick another field name to use in the search endpoint.
-- The endpoints are setup to limit us to the first 10 results. You may like to tweak this to fit your own vision.
+There is no model, schema introspection, or generated database client step. The native driver reads the fields and document structures already present in your collection.
 
-# 4. Start the app
+## 2. Configure the database connection
 
-## 4.1. Run locally
-To launch the app, run `npm run start` in the terminal. This is a shortcut for launching node in `watch` mode with environment variables loaded. To see the full startup script, take a look at `package.json`
+Copy `.env.example` to a new file named `.env`. Replace the placeholder with your Atlas connection string:
 
-## 4.2. Deploying
-When deploying to a server, we need to generate the Prisma Client on the server environment. As an example, on Vercel, you can define the following [Install Command](https://vercel.com/changelog/customizing-the-install-command-while-creating-projects) in your deployment settings:
-`npm ci && npx prisma generate` 
-This will install the libraries and generate the Prisma Client each time you push changes. NOTE: As a shortcut you can also use `npm run deploy`, since this is defined in `package.json`.
+```dotenv
+MONGODB_URI=mongodb+srv://username:password@cluster.abc.mongodb.net/database_name
+```
+
+The path after `.net/` selects the **database**, not the collection. Replace `database_name` with the database containing your data. URL-encode special characters in the username and password. Keep `.env` out of Git; it is already ignored.
+
+In Atlas, create a database user with read access to the dataset. Configure Network Access to allow your development machine and, when deploying, Netlify Functions. Check both credentials and network access when diagnosing connection failures.
+
+## 3. Select your collection and search field
+
+Open `backend/functions/api.js`. At the top of the file, set `collectionName` to the exact name of your existing collection and `searchField` to a string field you want to search:
+
+```js
+const collectionName = 'listingsAndReviews'
+const searchField = 'name'
+```
+
+The default collection belongs to Atlas's `sample_airbnb` database. To use it, select `sample_airbnb` in your connection string.
+
+For Atlas's sample restaurants dataset:
+
+- Use `sample_restaurants` as the database in `MONGODB_URI`.
+- Set `collectionName` to `restaurants`.
+- Set `searchField` to `name`.
+
+The `/api/items` endpoint returns all fields in each selected document, including nested objects, arrays, and documents with different structures. It does not require a `name` field or cast field values according to a model. Only the search endpoint assumes that your chosen search field contains text.
+
+All document fields are published, so select a collection whose contents you intend to expose.
+
+Use Compass's Schema tab to inspect your collection. No schema needs to be copied into the app. The frontend displays full documents as formatted JSON, so it works with different field names and structures.
+
+If you later need rules for inserted or updated documents, you can add optional [MongoDB collection validation](https://www.mongodb.com/docs/atlas/atlas-ui/validation/) in Atlas. The read-only API does not create or modify those rules.
+
+## 4. Run locally
+
+```sh
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000). The page fetches `/api/items` and displays complete documents as formatted JSON. The full response is also logged to the browser console. Use `npm run dev` to restart automatically when backend files change.
+
+Local startup is handled at the bottom of `backend/functions/api.js` by `if (!process.env.NETLIFY)`, matching the TODO example. Leave `NETLIFY` unset locally. The server connects to MongoDB before starting, so a missing or invalid connection string produces a startup error.
+
+## 5. Explore the API
+
+All data endpoints return a JSON array with at most 10 documents.
+
+| URL | Behavior |
+| --- | --- |
+| `/api/items` | Read documents directly from the collection, with no specified ordering |
+| `/api/search?terms=titanic` | Search the configured `searchField` for a case-insensitive substring, sorted by that field ascending | 
+
+Search terms are literal: a period matches a period, rather than any character. Omitting `terms`, or passing an empty string, matches documents whose configured search field contains text, up to the limit. Documents with missing or non-string search values are not converted into searchable strings. Repeating the parameter, such as `?terms=a&terms=b`, returns HTTP 400. Other query parameters do not change the collection, field, or result limit.
+
+```sh
+curl http://localhost:3000/api/items
+curl "http://localhost:3000/api/search?terms=cafe"
+```
+
+### Document values and JSON output
+
+Responses use MongoDB's `_id` field. ObjectIds become JSON strings; existing string and numeric IDs keep their types. There is no renamed `id` field. A numeric `name`, for example, remains a number in `/api/items`.
+
+The HTTP response is JSON, so BSON-specific types still need JSON representations: dates become ISO strings, for example. This is a convenient API representation rather than a BSON backup or export. See the driver's [BSON documentation](https://www.mongodb.com/docs/drivers/node/current/data-formats/bson/) for details on database types.
+
+## 6. Deploy to Netlify
+
+Deployment uses Netlify's web dashboard and GitHub integration. You do not need to install the Netlify CLI on the lab computer.
+
+1. Push the repository to GitHub and import it through the Netlify web dashboard, connecting the GitHub repository for deployment.
+2. Let Netlify use `netlify.toml`: publish directory `frontend`, functions directory `backend/functions`. No custom build command is needed for this plain JavaScript project.
+3. Add `MONGODB_URI` in the site's environment variable settings. Make it available to Functions and each deploy context you plan to test. Keep the URI out of `netlify.toml` and frontend code.
+4. Configure Atlas Network Access for the deployed function and use a database user with read access to the collection.
+5. Deploy, then check `/`,  `/api/items`, and `/api/search?terms=cafe`. Use the function logs to diagnose database failures. Redeploy after changing function environment variables.
+
+Netlify serves the frontend as static files. Requests under `/api/` are rewritten to the Express function using `serverless-http`. When `NETLIFY` is set, importing the function does not start a listening server.
+
+### Checking deployment behavior
+
+Running Express locally checks the shared API logic and frontend, but does not emulate Netlify's redirects or serverless runtime. Verify those using a deployed preview before publishing changes to an existing site. The Netlify CLI can be used for optional maintainer checks; it is not a prerequisite for the student workflow.
