@@ -55,22 +55,22 @@ In Atlas, create a database user with read access to the dataset. Configure Netw
 
 ## 3. Select your collection and search field
 
-Open `backend/functions/api.js`. At the top of the file, set `collectionName` to the exact name of your existing collection and `searchField` to a string field you want to search:
+Open `backend/functions/api.js`. At the top of the file, set `collectionName` to the exact name of your existing collection:
 
 ```js
-const collectionName = 'listingsAndReviews'
-const searchField = 'name'
+const collectionName = 'movies'
 ```
 
-The default collection belongs to Atlas's `sample_airbnb` database. To use it, select `sample_airbnb` in your connection string.
+The default collection belongs to Atlas's `sample_mflix` database. To use it, select `sample_mflix` in your connection string.
 
 For Atlas's sample restaurants dataset:
 
 - Use `sample_restaurants` as the database in `MONGODB_URI`.
 - Set `collectionName` to `restaurants`.
-- Set `searchField` to `name`.
 
-The `/api/items` endpoint returns all fields in each selected document, including nested objects, arrays, and documents with different structures. It does not require a `name` field or cast field values according to a model. Only the search endpoint assumes that your chosen search field contains text.
+The `/api/search` endpoint searches the collection's `title` field using a case-insensitive literal substring match. The search field is currently fixed in `backend/functions/api.js`; changing to a different field requires changing `title` in the search query as well.
+
+The `/api/items` endpoint returns all fields in each selected document, including nested objects, arrays, and documents with different structures. It does not cast field values according to a model. To use `/api/search`, the selected collection must contain a string-valued `title` field in the documents you want to find.
 
 All document fields are published, so select a collection whose contents you intend to expose.
 
@@ -95,9 +95,9 @@ All data endpoints return a JSON array with at most 10 documents.
 | URL | Behavior |
 | --- | --- |
 | `/api/items` | Read documents directly from the collection, with no specified ordering |
-| `/api/search?terms=titanic` | Search the configured `searchField` for a case-insensitive substring, sorted by that field ascending | 
+| `/api/search?terms=titanic` | Search the `title` field for a case-insensitive literal substring | 
 
-Search terms are literal: a period matches a period, rather than any character. Omitting `terms`, or passing an empty string, matches documents whose configured search field contains text, up to the limit. Documents with missing or non-string search values are not converted into searchable strings. Repeating the parameter, such as `?terms=a&terms=b`, returns HTTP 400. Other query parameters do not change the collection, field, or result limit.
+Search terms are literal: a period matches a period, rather than any character. Omitting `terms`, or passing an empty string, matches documents whose `title` field contains text, up to the limit. Documents with missing or non-string `title` values are not converted into searchable strings. Repeating the parameter, such as `?terms=a&terms=b`, returns HTTP 400. Other query parameters do not change the collection, field, or result limit.
 
 ```sh
 curl http://localhost:3000/api/items

@@ -20,9 +20,9 @@ const getData = async () => {
         }
 
         data.forEach(item => {
-            const pre = document.createElement('pre')
-            pre.textContent = JSON.stringify(item, null, 2)
-            content.appendChild(pre)
+            const title = document.createElement('p')
+            title.textContent = item.title ?? 'Untitled item'
+            content.appendChild(title)
         })
     } catch (error) {
         content.textContent = '❌ Unable to load data. Check the database configuration and server logs.'
