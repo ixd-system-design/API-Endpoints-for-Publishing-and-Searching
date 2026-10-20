@@ -57,7 +57,7 @@ if (!process.env.NETLIFY) {
     connectToDatabase()
         .then(() => {
             const server = app.listen(port, () => {
-                console.log(`API running at http://localhost:${server.address().port}`)
+                console.log(`API running at http://localhost:${port}`)
             })
         })
         .catch(error => {
